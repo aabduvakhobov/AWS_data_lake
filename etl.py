@@ -1,20 +1,23 @@
 import configparser
 from datetime import datetime
 import os
-from pyspark.sql import SparkSession
+from pyspark.sql import SparkSession, Window
 from pyspark.sql.functions import udf, col, desc, row_number
-from pyspark.sql import Window
 from pyspark.sql.functions import year, month, dayofmonth, hour, weekofyear, date_format
 from pyspark.sql.types import TimestampType
 
 config = configparser.ConfigParser()
 config.read('dl.cfg')
 
-os.environ['AWS_ACCESS_KEY_ID'] = config['AWS_ACCESS_KEY_ID']
-os.environ['AWS_SECRET_ACCESS_KEY'] = config['AWS_SECRET_ACCESS_KEY']
+os.environ['AWS_ACCESS_KEY_ID'] = config['AWS']['AWS_ACCESS_KEY_ID']
+os.environ['AWS_SECRET_ACCESS_KEY'] = config['AWS']['AWS_SECRET_ACCESS_KEY']
 
 
 def create_spark_session():
+    """
+
+    :return:
+    """
     spark = SparkSession \
         .builder \
         .config("spark.jars.packages", "org.apache.hadoop:hadoop-aws:2.7.0") \
@@ -23,6 +26,13 @@ def create_spark_session():
 
 
 def process_song_data(spark, input_data, output_data):
+    """
+
+    :param spark:
+    :param input_data:
+    :param output_data:
+    :return:
+    """
     # get filepath to song data file
     song_data = input_data + 'song_data/*/*/*/*.json'
 
@@ -30,7 +40,8 @@ def process_song_data(spark, input_data, output_data):
     df = spark.read.format("json").load(
         song_data,
         inferSchema=True,
-        header=True
+        header=True,
+        multiLine=True
     )
 
     # extract columns to create songs table
@@ -61,13 +72,14 @@ def process_song_data(spark, input_data, output_data):
 
 def process_log_data(spark, input_data, output_data):
     # get filepath to log data file
-    log_data = input_data + 'log_data/*/*/*/*.json'
+    log_data = input_data + 'log_data/*/*/*.json'
 
     # read log data file
     df = spark.read.format("json").load(
-        input_data,
+        log_data,
         inferSchema=True,
-        header=True
+        header=True,
+        multiLine=True
     )
 
     # filter by actions for song plays
@@ -95,6 +107,7 @@ def process_log_data(spark, input_data, output_data):
 
     # extract columns to create time table
     time_table = df.select('ts').withColumn('hour', hour(col('ts'))) \
+        .withColumn('year', year(col('ts')))\
         .withColumn('month', month(col('ts'))) \
         .withColumn('day', dayofmonth(col('ts'))) \
         .withColumn('week_of_year', weekofyear(col('ts'))) \
@@ -107,12 +120,12 @@ def process_log_data(spark, input_data, output_data):
         partitionBy('year', 'month').\
         parquet(output_data+'time_table')
 
-
     # read in song data to use for songplays table
-    song_data = spark.read.format("json").load(
-        "s3a://udacity-dend/song_data/*/*/*/*.json",
+    song_data = spark.read.format('json').load(
+        input_data + "song_data/*/*/*/*.json",
         inferSchema=True,
-        header=True
+        header=True,
+        multiLine=True
     )
 
     # extract columns from joined song and log datasets to create songplays table
@@ -144,7 +157,7 @@ def process_log_data(spark, input_data, output_data):
 def main():
     spark = create_spark_session()
     input_data = "s3a://udacity-dend/"
-    output_data = "s3://sparkify-data-lake-abdu/"
+    output_data = "s3://sparkify-data-lake-abdu/output/"
 
     process_song_data(spark, input_data, output_data)
     process_log_data(spark, input_data, output_data)
